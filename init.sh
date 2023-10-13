@@ -261,6 +261,12 @@ function init_hal_gralloc()
 			;;
 	esac
 
+	if [ "$BOARD" == "Jupiter" ]
+	then
+		set_property hwc.drm.rotate_90 8
+		set_property hwc.drm.rotate_270 2
+	fi
+
 	if [ "$GRALLOC4_MINIGBM" = "1" ]; then
 		set_property debug.ui.default_mapper 4
 		set_property debug.ui.default_gralloc 4
