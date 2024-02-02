@@ -26,21 +26,16 @@ function reprobe_module_if_loaded()
 MODULE_RELOAD_LIST=""
 # set RESTART_WIFI to true if a wifi module is going to be reloaded, note that users will have to manually turn on wifi again after a wificond restart
 RESTART_WIFI=false
-# set RESET_BT to true if a bluetooth module is going to be reloaded, note that user might have to manually turn on bluetooth again after bthal restart
-RESTART_BT=false
 
 ### EXAMPLE:
 ### if [ "$BOARD" == "xxx" ]
 ### then
-###   MODULE_RELOAD_LIST="$MODULE_RELOAD_LIST iwlwifi btusb"
+###   MODULE_RELOAD_LIST="$MODULE_RELOAD_LIST iwlwifi"
 ###   RESTART_WIFI=true
-###   RESTART_BT=true
 ### fi
 
-# usually bluetooth breaks when waking from s3 resets the device, then bthal continues to communicate to it with existing sockets as if the reset had never happened
-# while disabling bthal before suspend then starting it after is enough on the steamdeck, reprobing the module should make it work better in a more general sense
-RESTART_BT=true
-MODULE_RELOAD_LIST="$MODULE_RELOAD_LIST btusb"
+# note that btusb is unloaded in pre_sleep.sh, since it takes more than 10+ seconds to unload btusb right after wake
+# ie. do not put btusb into the reload list
 
 # users can use this to flag wificond restart
 USER_RESTART_WIFI_FLAG=/data/etc/wake_reload_wifi
@@ -49,29 +44,9 @@ then
 	RESTART_WIFI=true
 fi
 
-# users can use this to flag bluetooth restart
-USER_RESTART_BT_FLAG=/data/etc/wake_reload_bt
-if [ -e $USER_RESTART_BT_FLAG ]
-then
-	RESTART_BT=true
-fi
-
-# stop services if requested
-if $RESTART_BT
-then
-	setprop ctl.stop btlinux-1.1
-	setprop ctl.stop vendor.bluetooth-1-1
-fi
-
 if $RESTART_WIFI
 then
 	setprop ctl.stop wificond
-fi
-
-# setprop ctl.stop should be instant, but just in case
-if $RESTART_WIFI || $RESTART_BT
-then
-	sleep 0.2
 fi
 
 # perform module reprobe
@@ -101,18 +76,20 @@ then
 	setprop ctl.start wificond
 fi
 
-if $RESTART_BT
-then
-	bthal=$(getprop ro.bliss.bthal)
-	case $bthal in
-		"btlinux")
-			setprop ctl.start btlinux-1.1
-			;;
-		"celadon")
-			setprop ctl.start vendor.bluetooth-1-1
-			;;
-	esac
-fi
+# probe btusb since it was unloaded in pre_sleep.sh
+modprobe btusb
+
+# bthal and com.android.bluetooth were disabled in pre_sleep.sh
+bthal=$(getprop ro.bliss.bthal)
+case $bthal in
+	"btlinux")
+		setprop ctl.start btlinux-1.1
+		;;
+	"celadon")
+		setprop ctl.start vendor.bluetooth-1-1
+		;;
+esac
+pm enable com.android.bluetooth
 
 # allow user defined actions
 USER_SCRIPT=/data/etc/post_sleep.sh
